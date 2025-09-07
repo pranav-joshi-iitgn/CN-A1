@@ -6,17 +6,19 @@ IP_Pool = [
 
 import socket
 HOST = "127.0.0.1"
+# You can use `HOST = '10.240.21.72'` if you are on the ground floor of main library.
 PORT = 5353
 
 with socket.socket(
     socket.AF_INET, # IPv4
     socket.SOCK_STREAM # TCP
- ) as s:
-    s.bind((HOST, PORT)) # bind the process to the 5353 port
-    s.listen() # listen for connection requests
+ ) as resolver_socket:
+    resolver_socket.bind((HOST, PORT)) # bind the socket to the 5353 port
+    resolver_socket.listen() # listen for connection requests
     print(f"Server listening on {HOST}:{PORT}")
     while True:
-        conn, addr = s.accept() # successful connection `conn` from `addr`
+        conn, addr = resolver_socket.accept() 
+        # successful connection `conn` from `addr`
         with conn:
             print(f"Connection from {addr}")
 

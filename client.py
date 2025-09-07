@@ -84,7 +84,12 @@ if '--dwem' not in sys.argv: # dwem means "don't write extracted messages"
 # Adding header info and sending packets (part b)
 
 HOST = "127.0.0.1"  # IP (v4) address of the server
+# Note that since I am running the server process on my laptop that doesn't have a static IP address,
+# I am using 127.0.0.1. Otherwise, it will be better to be using an IP address 
+# that will allow other devices to connect to the server too. 
+# For example, '10.240.21.72' if the server is placed on the ground floor of library.
 PORT = 5353 # A port that isn't well known (0-1023) for running this network application
+# This port is what the server process will be listening to.
 table:list[list[str]] =[] # The final table/report; initially empty
 
 for i,message in enumerate(messages): # i is the value of the ID field
