@@ -92,7 +92,13 @@ PORT = 5353 # A port that isn't well known (0-1023) for running this network app
 # This port is what the server process will be listening to.
 table:list[list[str]] =[] # The final table/report; initially empty
 
-for i,message in enumerate(messages): # i is the value of the ID field
+
+def process_message(message:list[str],i:int) -> tuple[bytes,str,str]:
+    """
+    Processes the 6-tuple `message` which contains the features of the extracted DNS query.
+    Returns the modified DNS query with custom header (as bytes), the header (asa string) 
+    and the domain name for which the DNS query was made.
+    """
     queries:str = message[5] # The hostnames for which resolution is needed, sent in this packet
     date,t = message[3].split() # The format for time is `date HH:MM:SS.microseconds`
     t = t.split('.')[0] # removing microseconds.
@@ -107,28 +113,41 @@ for i,message in enumerate(messages): # i is the value of the ID field
     m = message[4].replace(':','') # Removing the ':' characters to get hex value
     m = header_hex + m # adding the header information to the payload
     m = binascii.unhexlify(m) # Converting from hexadecimal string to binary.
-    # Now, to send this to the server, we need to create a socket.
-    # To keep things simple, I'll use IPv4 (`AF_INET`) and TCP (`SOCK_STREAM`) for the socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s: # created socket
-        s.connect((HOST, PORT)) # connecting to server
-        l = len(m).to_bytes(2, "big") # According to RFC 1035 (section 4.2.2),
-        s.sendall(l) # to send DNS messages over TCP, we should first send the length of the message
-        s.sendall(m) # and then the actual message bytes. I'll do this for the custom DNS resolver too.
-        print(f"Sent {len(m)} bytes to {HOST}:{PORT}")
-        length_bytes = s.recv(2) # similar to how length was first sent from the client,
-        # the same will happen when server sends a message to the client.
-        # This allows both sides to know precisely when to close the TCP connection
-        if length_bytes: # If this is not a FIN segment
-            length = int.from_bytes(length_bytes, "big") # Extracting the length from the message
-            IP = s.recv(length) # Receiving those many bytes. This will be the resolved IP address
-            IP = IP.decode()  # Extracting the IP address from the message
-            print("Response:", IP)
-            table.append([ # For part c
-                header, # The header (HHMMSSID)
-                queries, # Comma separated host names
-                IP # The resolved IP address
-            ])
-    # The TCP connection will be closed on coming out the `with` block
+    return m,header,queries
+
+def send_message(m:bytes,s) -> None:
+    """
+    Sends the application layer message `m` (the DNS query with custom header) 
+    to the server, and adds the resolved IP address from the server to the report, 
+    namely the global variable `table` .
+    """
+    global table
+    l = len(m).to_bytes(2, "big") # According to RFC 1035 (section 4.2.2),
+    s.sendall(l) # to send DNS messages over TCP, we should first send the length of the message
+    s.sendall(m) # and then the actual message bytes. I'll do this for the custom DNS resolver too.
+    print(f"Sent {len(m)} bytes to {HOST}:{PORT}")
+    length_bytes = s.recv(2) # similar to how length was first sent from the client,
+    # the same will happen when server sends a message to the client.
+    # This allows both sides to know precisely when to close the TCP connection
+    if length_bytes: # If this is not a FIN segment
+        length = int.from_bytes(length_bytes, "big") # Extracting the length from the message
+        IP = s.recv(length) # Receiving those many bytes. This will be the resolved IP address
+        IP = IP.decode()  # Extracting the IP address from the message
+        print("Response:", IP)
+        table.append([ # For part c
+            header, # The header (HHMMSSID)
+            queries, # Comma separated host names
+            IP # The resolved IP address
+        ])
+
+# To send to the server, we need to create a socket.
+# To keep things simple, I'll use IPv4 (`AF_INET`) and TCP (`SOCK_STREAM`) for the socket
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s: # created socket
+    s.connect((HOST, PORT)) # connecting to server
+    for i,message in enumerate(messages): # i is the value of the ID field
+        m,header,queries = process_message(message,i)
+        send_message(m,s)
+# The TCP connection will be closed on coming out the `with` block
 
 # Writing the report/table (part c)
 fields = '"Custom header value (HHMMSSID)","Domain name","Resolved IP address"'

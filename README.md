@@ -7,7 +7,7 @@
 
 # Task 1: Custom DNS Resolver
 
-The PCAP file number should be $(197 + 172) \text{mod} 10 = 9$ , i.e. 9.pcap
+The PCAP file number should be $(197 + 172) \text{ mod } 10 = 9$. Thus, I should use `9.pcap` for the report.
 
 ## File Structure
 - `client.py`: Client-side script for packet parsing and message sending.
@@ -79,36 +79,33 @@ Response: 192.168.1.6
 and on server side :
 
 ```
-Connection from ('127.0.0.1', 53608)
+TCP connection established with 127.0.0.1:55674
 Received DNS query (37 bytes)
 Header extracted :18:04:16:0
 IP to return : 192.168.1.6
 response sent
-Connection from ('127.0.0.1', 53618)
 Received DNS query (37 bytes)
 Header extracted :18:04:16:1
 IP to return : 192.168.1.7
 response sent
-Connection from ('127.0.0.1', 53624)
 Received DNS query (37 bytes)
 Header extracted :18:04:16:2
 IP to return : 192.168.1.8
 response sent
-Connection from ('127.0.0.1', 53638)
 Received DNS query (38 bytes)
 Header extracted :18:04:16:3
 IP to return : 192.168.1.9
 response sent
-Connection from ('127.0.0.1', 53642)
 Received DNS query (36 bytes)
 Header extracted :18:04:16:4
 IP to return : 192.168.1.10
 response sent
-Connection from ('127.0.0.1', 53648)
 Received DNS query (36 bytes)
 Header extracted :18:04:16:5
 IP to return : 192.168.1.6
 response sent
+Terminated connection from 127.0.0.1:55674
+Server listening on 127.0.0.1:5353
 ```
 
 The output (in `Report.csv`) will be:
