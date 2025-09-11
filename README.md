@@ -3,17 +3,64 @@
 | Name | Roll no. |
 | ---- | -------- |
 | Pranav Joshi | 22110197 |
-| Neeshit | 22110172 |
+| Nishit | 22110172 |
 
 # Task 1: Custom DNS Resolver
 
-The PCAP file number should be $(197 + 172) \text{ mod } 10 = 9$. Thus, I should use `9.pcap` for the report.
+## Theory
+
+### DNS
+
+The Domain Name System is a distributed database service that maps hostnames (`www.google.com` for example) to IP addresses (`142.251.220.35` for example). The message format for DNS is as follows :
+
+![DNS message format](images/dns.png)
+
+The DNS message payload can be extracted using `pyshark` which is a Python wrapper around TShark, the CLI alternative to the WireShark software. 
+Since for this task, we only need to extract the queries, we need to look at bytes 5 and 6 (with 1 based indexing) to get the number of queries/questions, and then extract the questions, starting from byte 13.
+
+For example, this is an DNS message (in hexadecimal, and bytes separated by ':') :
+
+```
+00:00:01:00:00:01:00:00:00:00:00:00:07:74:77:69:74:74:65:72:03:63:6f:6d:00:00:01:00:01
+```
+
+Here, we have :
+
+| Field | Value (hexadecimal) |
+| ----- | ----- |
+| Identification | 00 00 |
+| Flags | 01 00 |
+| no. of questions | 00 01 |
+| no. of answers | 00 00 |
+| no. of authority RRs | 00 00 |
+| no. of additional RRs | 00 00 |
+| questions | 07 74 77 69 74 74 65 72 03 63 6f 6d 00 00 01 00 01 |
+
+The number of question is thus 1. 
+In the "questions" section, each question is a $(\text{name},\text{type},\text{class})$ tuple. The $\text{name}$ part is encoded by breaking the Fully Qualified Domain Name (FQDN) into its consituent parts (for example, `"twitter.com"` to `["twitter","com"]`) and then encoding each charater in ASCII format (one byte for each character) for each part. For each part, we also add prepend a byte that tells the length. For example, for `"twitter"` the length is 7 and so we prepend the byte `0x07` before the encoded name, namely `74 77 69 74 74 65 72` (hexadecimal). Similarly, for `"com"` , we get length of `0x03` and encoding of `63 6f 6d` . Finally, we put a null character `0x00` signifying the end of the name. After that, the next 2 bytes are the $\text{type}$. In our example, it is `0x0001` (1 in decimal), which is the code for `A` type queries. And then, the last 2 bytes are the $\text{class}$ . In our example, it is `0x0001`, which is the code for `IN` (means "internet").
+
+Since we are asked to only report the custom header, FQDN, and the response from the server, other information, such as $\text{type}$ and $\text{class}$ are not needed to be extracted.
+
+Rather than parsing the bytes myself, I will rely on `pyshark` to do this by default.
+
+But just for the sake of completeness, I'll provide an option (`--parse`) that whill parse the DNS message manually and extract the queries.
+
+### Custom header
+
+According to the assignment PDF, the custom header is 
+
+>  A value of the current date-time and id,
+use timestamp in format "HHMMSSID" 
+
+This can be interpreted as either the current system time on the client, or the time when the DNS message was originaly sent. The time when DNS message is sent is recorded by WireShark while capturing the packets and can be easiliy extracted by `pyshark`. Since I am unsure what to implement, I will use the current system time on my laptop by default and provide the `--st` option to use the packet sniff time.
+
 
 ## File Structure
 - `client.py`: Client-side script for packet parsing and message sending.
 - `server.py`: Server-side script for DNS resolution logic.
 - `DNSmessages.csv`: Stores extracted DNS queries. This is optional and can be avoided using `--dwem` option for `client.py` .
 - `Report.csv`: Records query headers, domains, and resolved IPs.
+- `9.pcap` : The PCAP file number should be $(197 + 172) \text{ mod } 10 = 9$. Thus, I should use `9.pcap` for the task.
 
 ## Usage
 
@@ -29,10 +76,10 @@ The PCAP file number should be $(197 + 172) \text{ mod } 10 = 9$. Thus, I should
 python3 server.py
 ```
 
-This will start the server on `127.0.0.1:5353`, giving this output:
+This will start the server on `127.0.0.1:53535`, giving this output:
 
 ```
-Server listening on 127.0.0.1:5353
+Server listening on 127.0.0.1:53535
 ```
 
 Ensure the server is running before starting the client.
@@ -40,93 +87,119 @@ Ensure the server is running before starting the client.
 ### Running the Client
 
 ```
-python3 client.py [OPTIONS] <pcapfile>
+python3 client.py [OPTIONS] <pcapfiles>
 ```
+
+You can pass in multiple (space separated) PCAP filenames in place of `<pcapfiles>`.
 
 #### Options:
 
 - `--help`: Show help message and usage instructions.
 - `--de`: Skip extraction from PCAP and use previously extracted messages (in `DNSmessages.csv`).
 - `--dwem`: Skip writing extracted messages in `DNSmessages.csv`.
+- `--tcp`: Uses TCP rather than UDP for transport layer.
+- `--parse`: Parses the DNS message without relying on PyShark
+- `--st`: Uses packet sniff time rather than the current system time.
+- `--batch`: Batches the extraced DNS messages to resolve togather, rather than immediately after extraction (default)
 
 The client parses DNS queries from the PCAP file, adds a header, sends them to the server, and writes the results to `Report.csv`.
 
-For example, on client side we get this: 
+### Running the server
+
+```
+python3 server.py [--tcp]
+```
+
+If the `--tcp` option is set, the server uses TCP to communicate with the client.
+When using UDP, there is a thread that waits for the `exit` command on the terminal to gracefully close the server. Pressing `Ctrl`+`C` also exits (for both UDP and TCP modes). 
+
+## Example
+
+On client side we get this: 
 
 ```
 $ python3 client.py 9.pcap
-2025-09-04 18:04:16.129282 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-2025-09-04 18:04:16.129867 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-2025-09-04 18:04:16.129593 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-2025-09-04 18:04:16.129442 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-2025-09-04 18:04:16.129997 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-2025-09-04 18:04:16.129735 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
-Extracted!
-Sent 37 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:50:22.885383 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 37 bytes to 127.0.0.1:53535
 Response: 192.168.1.6
-Sent 37 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:50:33.896118 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 37 bytes to 127.0.0.1:53535
 Response: 192.168.1.7
-Sent 37 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:50:37.059897 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 37 bytes to 127.0.0.1:53535
 Response: 192.168.1.8
-Sent 38 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:50:45.720688 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 38 bytes to 127.0.0.1:53535
 Response: 192.168.1.9
-Sent 36 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:50:53.805059 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 36 bytes to 127.0.0.1:53535
 Response: 192.168.1.10
-Sent 36 bytes to 127.0.0.1:5353
+Packet : 2025-09-11 13:51:03.031684 : UDP 10.240.26.55 → 8.8.8.8 : 00:00:01:0...
+Sent 36 bytes to 127.0.0.1:53535
 Response: 192.168.1.6
+Extracted DNS queries from PCAP and resolved
 ```
 
 and on server side :
 
 ```
-TCP connection established with 127.0.0.1:55674
-Received DNS query (37 bytes)
-Header extracted :18:04:16:0
+$ python3 server.py
+Server listening on 127.0.0.1:53535
+Received DNS query from 127.0.0.1:43863
+Header extracted :13:50:22:0
 IP to return : 192.168.1.6
 response sent
-Received DNS query (37 bytes)
-Header extracted :18:04:16:1
+Received DNS query from 127.0.0.1:59360
+Header extracted :13:50:33:1
 IP to return : 192.168.1.7
 response sent
-Received DNS query (37 bytes)
-Header extracted :18:04:16:2
+Received DNS query from 127.0.0.1:47293
+Header extracted :13:50:37:2
 IP to return : 192.168.1.8
 response sent
-Received DNS query (38 bytes)
-Header extracted :18:04:16:3
+Received DNS query from 127.0.0.1:36421
+Header extracted :13:50:45:3
 IP to return : 192.168.1.9
 response sent
-Received DNS query (36 bytes)
-Header extracted :18:04:16:4
+Received DNS query from 127.0.0.1:39677
+Header extracted :13:50:53:4
 IP to return : 192.168.1.10
 response sent
-Received DNS query (36 bytes)
-Header extracted :18:04:16:5
+Received DNS query from 127.0.0.1:43491
+Header extracted :13:51:03:5
 IP to return : 192.168.1.6
 response sent
-Terminated connection from 127.0.0.1:55674
-Server listening on 127.0.0.1:5353
+exit
+Shutting down server...
 ```
 
 The output (in `Report.csv`) will be:
 
 | Custom header value (HHMMSSID)   | Domain name   | Resolved IP address   |
 | -------------------------------- | ------------- | --------------------- |
-| 18041600                         | twitter.com   | 192.168.1.6           |
-| 18041601                         | example.com   | 192.168.1.7           |
-| 18041602                         | netflix.com   | 192.168.1.8           |
-| 18041603                         | linkedin.com  | 192.168.1.9           |
-| 18041604                         | reddit.com    | 192.168.1.10          |
-| 18041605                         | openai.com    | 192.168.1.6           |
+| 13502200                         | twitter.com   | 192.168.1.6           |
+| 13503301                         | example.com   | 192.168.1.7           |
+| 13503702                         | netflix.com   | 192.168.1.8           |
+| 13504503                         | linkedin.com  | 192.168.1.9           |
+| 13505304                         | reddit.com    | 192.168.1.10          |
+| 13510305                         | openai.com    | 192.168.1.6           |
 
 ### Output Files
 
 - `DNSmessages.csv`: Extracted DNS queries from the PCAP (for inspection).
 - `Report.csv`: Table of each query, header, and resolved IP (for submission).
 
+<div style="page-break-after: always;"></div>
+
 # Task 2: Traceroute on different OS
 
+## Theory
+
+### `traceroute`
+
 According to the manual page for `traceroute 2.1.0`, the way this utility measures the Round-Trip-Time (RTT) for each node in the path to a particular destination host is by sending probing packets (with various transport and network layer protocols) with small time-to-live (TTL) values. It starts with a TTL value of 1 and increases upto `max_ttl` which is set to 30 by default. For every TTL value, it sends 3 probe packets. For every packet that exceeds the number of hops (the TTL value) while moving towards the destination, the router which last decremented its TTL value (before it reaching 0) sends back an ICMP packet that reports this event. The time taken for this packet to reach, starting from the time that the probe packet was sent is the RTT for that node, whose IP address is there in said ICMP packet.
+
+### `tcpdump`
 
 Now, `tcpdump` is an utility that allows capturing the packets sent to your device. Since I am connected to the internet through an ethernet connection with my smartphone (using USB), which is further connected to the internet using cellular data, my laptop won't be getting any other traffic. 
 Now, I will run `tcpdump` in th background as `sudo tcpdump -i enx0207646b3637 -w traceroutecap.pcap &` . Here, `enx0207646b3637` is the USB ethernet interface and `traceroutecap.pcap` is the name of the output file where the capture/dump will be written.
@@ -134,7 +207,9 @@ To kill this `tcpdump` process later, I will store the process ID as `TCPDUMP_PI
 Then, I will run `traceroute` and later kill the `tcpdump` process using `sudo kill $TCPDUMP_PID` .
 Note that my smartphone's IPv4 address is `49.34.205.233` and my laptop's IPv4 address is `192.168.42.179` . This will come in handy later. This modification is harmless to our analysis as I'll show later (after answering the questions).
 
-Now, what I really want to run is `traceroute google.com`, but I don't want to deal with the packets involved in the DNS lookup for `google.com`. So, I will instead, use the IPv4 address `142.250.183.78`. This is one of Google's servers.
+## Execution
+
+What I really want to run is `traceroute google.com`, but I don't want to deal with the packets involved in the DNS lookup for `google.com`. So, I will instead, use the IPv4 address `142.250.183.78`. This is one of Google's servers.
 
 I got the IPv4 address using `nslookup`.
 
@@ -184,30 +259,36 @@ traceroute to 142.250.183.78 (142.250.183.78), 30 hops max, 60 byte packets
 0 packets dropped by kernel
 ```
 
-Now, the PCAP file can be analysed in WireShark. 
+We can do a similar execution of `tracert` (on Windows) :
 
-![wireshark](images/image.png)
+![tracert](images/tracert.jpeg)
+
+Now, the PCAP file (for Linux `traceroute` execution) can be analysed in WireShark. 
+
+![Linux `traceroute` execution capture](images/image.png)
 
 Notice that the size of the frame is 60 bytes, just as displayed by `traceroute` .
 The initial few UDP and ICMP packets are for the Enthernet connection (interface `enx0207646b3637`) through USB to my smartphone.
 
-![wireshark2](images/image-1.png)
+![`traceroute` packets (closer view)](images/image-1.png)
 
 Since each packet is being sent through this, it also follows the Ethernet II protocol.
 
 Also notice that although we tried to remove the DNS lookups for `google.com` , there are still some other DNS lookups. Since the probe packets do not follow the DNS message format, we can simply remove the DNS related packets and only focus on the UDP and ICMP/ICMPv6 packets . This can be done using the filter `not dns` in WireShark.
 
-![alt text](images/image-2.png)
+![with "not dns" filter](images/image-2.png)
 
 Even the `ICMPv6` packets are not relevant since they are not signifying either TTL reaching 0 or the port being inactive on the destination.
 
-So, we can filter them out too using `(not dns) and (not icmpv6)` as he filter.
+So, we can filter them out too using `(not dns) and (not icmpv6)` as the filter.
 
-![alt text](images/image-3.png)
+![with "(not dns) and (not icmpv6)" filter](images/image-3.png)
 
 This leaves us with only 63 packets out of the original 82 captured.
 
-Now, we are ready to answer the questions.
+<div style="page-break-after: always;"></div>
+
+## Questions
 
 ### Question 1 
 What protocol does Windows tracert use by default, and what protocol does Linux
@@ -215,9 +296,21 @@ traceroute use by default?
 
 ---
 
-On Linux, the protocol that is used by default is UDP. This is evident from the screenshots of the packets analysed on WireShark. On Windows, the protocol is ICMP by default, according to the manual page. But these are only the default settings. We can explicitely state the protocol to use, using `-I` for ICMP, `-T` for TCP SYN packets as probes and `-U` for UDP. There are other protocols too, such as layer-four-TCP (`lft`) and raw IP datagrams.
+On Linux, the protocol that is used by default for the probe packets is UDP. This is evident from the screenshots of the packets analysed on WireShark for Linux. 
+
+But this is only a default settings. We can explicitely state the protocol to use, using `-I` for ICMP, `-T` for TCP SYN packets as probes and `-U` for UDP. There are other protocols too, such as layer-four-TCP (`lft`) and raw IP datagrams.
+
+For Windows `tracert`, the protocol is ICMP Echo/Ping request by default. For example, in the capture `traceroutecap_windows.pcap` :
+
+![Windows `tracert` execution capture](images/file_2025-09-09_00.45.03.png)
+
+From the [page]((https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/tracert)) for `tracert` on Microsoft Learn :
+
+> tracert- this diagnostic tool determines the path taken to a destination by sending Internet Control Message Protocol (ICMP) echo Request or ICMPv6 messages to the destination with incrementally increasing time to live (TTL) field values
 
 ---
+
+<div style="page-break-after: always;"></div>
 
 ### Question 2
 Some hops in your traceroute output may show ***. Provide at least two reasons
@@ -226,14 +319,20 @@ why a router might not reply.
 ---
 
 According to the manual page for `traceroute` :
+
 > If there is no response within a certain timeout, an "*" (asterisk) is printed for that probe.
+
 This timeout could happen due to various reasons, such as 
+
 - the probe packet being lost (in case of UDP probes for example)
 - the Round-Trip-Time being too large for that router/host.
 - A firewall preventing the host from responding to UDP packets.
   For example, one such firewall exists for `dominos.com`. This is talked about in detail in the answer for Q5.
+- A router not sending ICMP (time to live exceeded) responses for messages that reach TTL value of 0 when being processed by it. In such a case, the probes for the corresponding initial TTL will not get a response, but ones after them may still get responses since those responses will be generated by different routers or the destination end-system.
 
 ---
+
+<div style="page-break-after: always;"></div>
 
 ### Question 3 
 
@@ -245,35 +344,41 @@ probes sent to the destination?
 The source and destination port numbers.
 Consider these highlighted packets :
 
-![alt text](images/image-5.png)
+![Consecutive Probe Packets](images/image-5.png)
 
-In the first highlighted packet, 51856 is the value of the source port number field in the UDP datagram/segment and 33470 is the value for destination port number. All these three highlighted packets had a TTL of 13 as you can see from this picture.
+In the first highlighted packet, 51856 is the value of the source port number field in the UDP datagram/segment and 33470 is the value for destination port number. All these three highlighted packets had a TTL of 13 as you can see from these three screenshots :
 
-<table><tr>
-<td><img src=images/image-6.png></td>
-<td><img src=images/image-7.png></td>
-<td><img src=images/image-8.png></td>
-</tr></table>
+<img src=images/image-6.png>
+<img src=images/image-7.png>
+<img src=images/image-8.png>
 
 ---
+
+<div style="page-break-after: always;"></div>
 
 ### Question 4
 At the final hop, how is the response different compared to the intermediate hop?
 
 ----
 
-In the final hop, the response indicates an unreachable port rather than the TTL value reaching 0 (for the packet, as it hops). This is explicitely stated in the manual page :
+In the final hop, the response indicates an unreachable port rather than the TTL value reaching 0 (for the packet, as it hops). This is explicitely stated in the manual page for `traceroute` :
 
 >We start our probes with a ttl of one and in‐
 crease  by  one  until we get an ICMP "port unreachable" (or TCP reset)
 
 For the packets I captured, this shows for the packets at the very end :
 
-![alt text](images/image-9.png)
+![final hop response (Linux)](images/image-9.png)
 
 On the other hand, for an intermediate hop, the expected response (for Linux) is an ICMP packet saying "time to live exceeded".
 
+On Windows, the expected type of response from the destination end-system is an ICMP echo reply.
+
+![final hop response (Windows)](images/file_2025-09-09_00.59.22.png)
+
 ---
+
+<div style="page-break-after: always;"></div>
 
 ### Question 5
 Suppose a firewall blocks UDP traffic but allows ICMP — how would this affect the
@@ -281,9 +386,38 @@ results of Linux traceroute vs. Windows tracert?
 
 ----
 
+Many ISPs and CDNs (like Akamai, which serves `dominos.com`) configure intermediate routers to ignore ICMP Echo Requests or rate-limit ICMP responses. This prevents their infrastructure from being overloaded by diagnostic tools like `traceroute`/`ping` .
 Let's take the example of `dominos.com` .
-![alt text](images/image-4.png)
-As you can see from this execution of `traceroute`, the UDP probes are unable to reach the final destination (as indicated by the astericks for TTL values 15 and 16), but the ICMP probes are. Since `tracert` on Windows uses ICMP probes by default, it will be able to measure the RTT for each node in the full path, including the destination host; without the need for any extra modifications (such as the `-I` option being set).
+
+![traceroute execution for dominos.com](images/image-4.png)
+
+As you can see from this execution of `traceroute`, the UDP probes are unable to reach the final destination (as indicated by the astericks for TTL values 15 and 16), but the ICMP probes are. 
+
+Since `tracert` on Windows uses ICMP probes by default, the probes aren't dropped pre-maturely and are eventually able to reach the destination (as TTL is increased).
+
+```
+PS C:\Users\ASUS> tracert dominos.com
+
+Tracing route to a23-9-119-229.deploy.static.akamaitechnologies.com [23.9.119.229]
+over a maximum of 30 hops:
+
+  1     3 ms     2 ms     2 ms  10.27.13.154
+  2    29 ms     5 ms     6 ms  10.7.0.5
+  3    22 ms    10 ms    10 ms  172.16.4.7
+  4    38 ms     7 ms     8 ms  14.139.98.1
+  5    43 ms     6 ms     6 ms  10.117.81.253
+  6     *        *        *     Request timed out.
+  7     *        *        *     Request timed out.
+  8    47 ms    34 ms    39 ms  10.255.222.33
+  9    62 ms    36 ms    35 ms  115.247.100.29
+ 10     *        *        *     Request timed out.
+ 11    61 ms    35 ms    40 ms  121.240.252.1.static-hyderabad.vsnl.net.in [121.240.252.1]
+ 12     *        *        *     Request timed out.
+ 13   167 ms    84 ms    42 ms  121.244.3.222.static-mumbai.vsnl.net.in [121.244.3.222]
+ 14    70 ms    32 ms    32 ms  a23-9-119-229.deploy.static.akamaitechnologies.com [23.9.119.229]
+
+Trace complete.
+```
 
 ----
 
@@ -295,7 +429,7 @@ The script will be the same as before, but with `www.google.com` instead of `142
 
 The output of `traceroute` is :
 
-![alt text](images/image-11.png)
+![`traceroute www.google.com`](images/image-11.png)
 
 For better visibility, this is the output in text :
 
@@ -324,7 +458,7 @@ traceroute to www.google.com (142.250.192.4), 30 hops max, 60 byte packets
 
 When analysed in WireShark, without any filters, we get this :
 
-![alt text](images/image-10.png)
+![DNS lookup](images/image-10.png)
 
 As you can see, before sending probes to `www.google.com`, we fist need to do a DNS lookup.
 
@@ -334,4 +468,4 @@ There were also no `ICMPv6` responses when using `google.com` directly.
 
 Apart from that, there were no major differences.
 
-![alt text](images/image-12.png)
+![remaining capture](images/image-12.png)
