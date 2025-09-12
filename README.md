@@ -43,7 +43,7 @@ Since we are asked to only report the custom header, FQDN, and the response from
 
 Rather than parsing the bytes myself, I will rely on `pyshark` to do this by default.
 
-But just for the sake of completeness, I'll provide an option (`--parse`) that whill parse the DNS message manually and extract the queries.
+But just for the sake of completeness, I'll provide an option (`--parse`) that will parse the DNS message manually and extract the queries.
 
 ### Custom header
 
@@ -261,7 +261,36 @@ traceroute to 142.250.183.78 (142.250.183.78), 30 hops max, 60 byte packets
 
 We can do a similar execution of `tracert` (on Windows) :
 
-![tracert](images/tracert.jpeg)
+```
+C:\Users\ASUS> nslookup google.com
+Server:  dns-prod.skylus.lan
+Address:  10.0.136.7
+
+Non-authoritative answer:
+Name:    google.com
+Addresses:  2404:6800:4009:80c::200e
+          142.251.220.14
+
+
+C:\Users\ASUS> tracert 142.251.220.14
+
+Tracing route to hkg07s49-in-f14.1e100.net [142.251.220.14]
+over a maximum of 30 hops:
+
+  1     2 ms     1 ms     1 ms  10.7.0.5
+  2    43 ms     8 ms     1 ms  172.16.4.7
+  3     5 ms     3 ms     3 ms  14.139.98.1
+  4    16 ms     1 ms    15 ms  10.117.81.253
+  5    12 ms    12 ms    12 ms  10.154.8.137
+  6    13 ms    10 ms    12 ms  10.255.239.170
+  7    10 ms    52 ms    76 ms  10.152.7.214
+  8    61 ms    27 ms    46 ms  72.14.204.62
+  9    13 ms    13 ms    13 ms  142.251.76.33
+ 10    18 ms    14 ms    14 ms  142.251.64.13
+ 11   236 ms   162 ms    68 ms  hkg07s49-in-f14.1e100.net [142.251.220.14]
+
+Trace complete.
+```
 
 Now, the PCAP file (for Linux `traceroute` execution) can be analysed in WireShark. 
 
@@ -460,7 +489,7 @@ When analysed in WireShark, without any filters, we get this :
 
 ![DNS lookup](images/image-10.png)
 
-As you can see, before sending probes to `www.google.com`, we fist need to do a DNS lookup.
+As you can see, before sending probes to `www.google.com`, we first need to do a DNS lookup.
 
 The IP address returned is `142.250.192.4` which is different from what we got earlier from `nslookup`. This is because of load distribution/balancing over the servers.
 
