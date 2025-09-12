@@ -3,7 +3,7 @@
 | Name | Roll no. |
 | ---- | -------- |
 | Pranav Joshi | 22110197 |
-| Nishit | 22110172 |
+| Nishit Mistry | 22110172 |
 
 # Task 1: Custom DNS Resolver
 
